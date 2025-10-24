@@ -45,6 +45,7 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
     helper_funcs_str = helper_obj_match.group(2)
     print(f"  [STEP 2-3] ヘルパーオブジェクト名 '{helper_obj_name}' を特定しました。")
     
+    # メイン関数の操作リストを抽出 (パラメータがない場合も対応)
     main_func_match = re.search(
         r'\w+\s*=\s*function\s*\(\s*a\s*\)\s*{\s*a\s*=\s*a\.split\(""\)\s*;\s*((?:[a-zA-Z0-9$]+\.[a-zA-Z0-9$]+\(a(?:,\s*\d+)?\)\s*;)+)\s*return\s*a\.join\(""\)\s*}', 
         js_code
@@ -104,6 +105,7 @@ def decipher_signature(s_cipher: str, js_url: str) -> Optional[str]:
     op_count = 0
     
     for op in operations:
+        # パラメータの有無に柔軟に対応
         func_call = re.match(r'([a-zA-Z0-9$]+\.[a-zA-Z0-9$]+)\(a(?:,\s*(\d+))?\)', op)
         if not func_call:
             continue
@@ -182,9 +184,8 @@ def parse_final_api():
         response.raise_for_status()
         innertube_response: Dict[str, Any] = response.json()
         
-        # 🔑 ここにprint文を追加
+        # 🔑 ご要望のprint文
         print(f"レスポンス: {response}")
-        # JSONレスポンス全体を出力（デバッグのため、整形して出力）
         print(f"Innertubeレスポンス (JSON): {json.dumps(innertube_response, indent=2)}")
         
         print("[STEP 1-2] 外部APIからのデータ取得成功。JSONを解析します。")
