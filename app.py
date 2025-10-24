@@ -45,30 +45,36 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
     helper_obj_name = helper_obj_match.group(1)
     helper_funcs_str = helper_obj_match.group(2)
     print(f"  [STEP 2-3] ヘルパーオブジェクト名 '{helper_obj_name}' を特定しました。")
+
+    # 2. 🔑 メイン復号化関数の操作リストの抽出 (ロバスト化)
     
-    # 2. 🔑 メイン復号化関数の操作リストの抽出 (正規表現をより柔軟に強化)
-    
-    # メイン関数は通常、a.split("")の後に操作が続き、a.join("")で終わる
-    # ヘルパーオブジェクト名 (例: A) と、その関数呼び出し (例: A.a(a, 3)) を含むパターンを探す
-    
-    # パターン: 'a.split("");' の後、'return a.join("")' の前にある操作のブロックをキャプチャ
-    # 操作は `オブジェクト名.関数名(a, パラメータ)` の形式
-    main_func_match = re.search(
-        r'a\.split\(""\)\s*;\s*((?:'+re.escape(helper_obj_name)+r'\.[a-zA-Z0-9$]+\(a(?:,\s*\d+)?\)\s*;)+)\s*return\s*a\.join\(""\)', 
-        js_code
+    # a. メイン関数の本体を特定
+    # パターン: function(a){a=a.split("")...}
+    main_func_body_match = re.search(
+        r'a\.split\(""\);\s*(.*?);\s*return\s*a\.join\(""\)', 
+        js_code, 
+        re.DOTALL
     )
     
-    if not main_func_match: 
-        # より緩い、フォールバックの正規表現 (念のため)
-        main_func_match = re.search(
-            r'a\.split\(""\);\s*([a-zA-Z0-9$]{2}\.[a-zA-Z0-9$]+\(a,\d+\);?)+',
-            js_code
-        )
-        if not main_func_match:
-            print("  [ERROR] メイン復号化操作リストの抽出に失敗しました。")
-            return None
+    if not main_func_body_match: 
+        print("  [ERROR] メイン復号化操作リストの抽出に失敗しました。")
+        return None
+        
+    main_func_body = main_func_body_match.group(1)
+    print(f"  [DEBUG] メイン関数本体を抽出しました。")
     
-    operations = main_func_match.group(1).split(';')
+    # b. 抽出した関数本体から、ヘルパーオブジェクトを使用した操作呼び出しのみを抽出
+    # 操作は `オブジェクト名.関数名(a, パラメータ);` の形式を複数回繰り返す
+    operation_list = re.findall(
+        re.escape(helper_obj_name)+r'\.[a-zA-Z0-9$]+\(a(?:,\s*\d+)?\)\s*;', 
+        main_func_body
+    )
+    
+    if not operation_list:
+        print("  [ERROR] 抽出された関数本体から操作リストを特定できませんでした。")
+        return None
+        
+    operations = operation_list
 
     # 3. Pythonで実行可能なヘルパー関数を定義
     decipher_funcs: Dict[str, Callable] = {}
@@ -102,6 +108,7 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
                 break
     
     _decipher_cache['decipher_funcs'] = decipher_funcs
+    # operation_listは既にセミコロン付きなのでそのまま格納
     _decipher_cache['operations'] = [op.strip() for op in operations if op.strip()]
     print(f"  [STEP 2-4] 抽出されたデサイファリング操作の数: {len(_decipher_cache['operations'])} 個")
     print("  [STEP 2-5] 復号化ロジックの解析とキャッシュが完了しました。")
@@ -122,9 +129,7 @@ def decipher_signature(s_cipher: str, js_url: str) -> Optional[str]:
     op_count = 0
     
     for op in operations:
-        # パラメータの有無に柔軟に対応
-        # func_call = re.match(r'([a-zA-Z0-9$]+\.[a-zA-Z0-9$]+)\(a(?:,\s*(\d+))?\)', op)
-        # 🔑 正規表現をより緩く修正
+        # opは "A.b(a,3);" のような文字列
         func_call = re.match(r'([a-zA-Z0-9$]+\.[a-zA-Z0-9$]+)\(a\s*(?:,\s*(\d+))?\)', op)
         
         if not func_call:
