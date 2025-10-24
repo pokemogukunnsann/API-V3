@@ -183,7 +183,7 @@ def parse_final_api():
         response.raise_for_status()
         innertube_response: Dict[str, Any] = response.json()
         print("[STEP 1-2] 外部APIからのデータ取得成功。JSONを解析します。")
-        print(f"レスポンス:{response}")
+        print(f"レスポンス:{response},{innertube_response}")
         
     except requests.exceptions.RequestException as e:
         print(f"[FATAL] 外部APIからのデータ取得中にエラーが発生: {e}")
@@ -193,6 +193,7 @@ def parse_final_api():
     status = innertube_response.get("playabilityStatus", {}).get("status")
     if status in ["LOGIN_REQUIRED", "UNPLAYABLE"]:
         print(f"[BLOCK] ⚠️ YouTubeブロック検出: status={status}")
+        #print(f"レスポンス:")
         return jsonify({"status": "remote_error", "message": "External API or YouTube block detected.", "details": innertube_response}), 403
 
     # 3. データ整理
