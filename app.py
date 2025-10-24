@@ -36,6 +36,7 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
         print(f"  [ERROR] JSファイルダウンロードエラー: {e}")
         return None
 
+    # 1. ヘルパー関数オブジェクトの抽出 (例: var A={...})
     helper_obj_match = re.search(r'var\s+([a-zA-Z0-9$]+)=\s*\{([\s\S]+?)\};', js_code, re.MULTILINE)
     if not helper_obj_match: 
         print("  [ERROR] ヘルパー関数オブジェクトの抽出に失敗しました。")
@@ -45,22 +46,36 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
     helper_funcs_str = helper_obj_match.group(2)
     print(f"  [STEP 2-3] ヘルパーオブジェクト名 '{helper_obj_name}' を特定しました。")
     
+    # 2. 🔑 メイン復号化関数の操作リストの抽出 (正規表現をより柔軟に強化)
+    
+    # メイン関数は通常、a.split("")の後に操作が続き、a.join("")で終わる
+    # ヘルパーオブジェクト名 (例: A) と、その関数呼び出し (例: A.a(a, 3)) を含むパターンを探す
+    
+    # パターン: 'a.split("");' の後、'return a.join("")' の前にある操作のブロックをキャプチャ
+    # 操作は `オブジェクト名.関数名(a, パラメータ)` の形式
     main_func_match = re.search(
-        r'\w+\s*=\s*function\s*\(\s*a\s*\)\s*{\s*a\s*=\s*a\.split\(""\)\s*;\s*((?:[a-zA-Z0-9$]+\.[a-zA-Z0-9$]+\(a(?:,\s*\d+)?\)\s*;)+)\s*return\s*a\.join\(""\)\s*}', 
+        r'a\.split\(""\)\s*;\s*((?:'+re.escape(helper_obj_name)+r'\.[a-zA-Z0-9$]+\(a(?:,\s*\d+)?\)\s*;)+)\s*return\s*a\.join\(""\)', 
         js_code
     )
+    
     if not main_func_match: 
-        print("  [ERROR] メイン復号化操作リストの抽出に失敗しました。")
-        return None
-        
+        # より緩い、フォールバックの正規表現 (念のため)
+        main_func_match = re.search(
+            r'a\.split\(""\);\s*([a-zA-Z0-9$]{2}\.[a-zA-Z0-9$]+\(a,\d+\);?)+',
+            js_code
+        )
+        if not main_func_match:
+            print("  [ERROR] メイン復号化操作リストの抽出に失敗しました。")
+            return None
+    
     operations = main_func_match.group(1).split(';')
 
+    # 3. Pythonで実行可能なヘルパー関数を定義
     decipher_funcs: Dict[str, Callable] = {}
     
     def func_splice(arr: list, index: int) -> list: del arr[:index]; return arr
     def func_reverse(arr: list, *args) -> list: arr.reverse(); return arr
     def func_swap(arr: list, index: int) -> list:
-        # 実行前に配列の長さを確認し、indexが有効な範囲に収まるようにする
         if not arr: return arr
         index = index % len(arr)
         temp = arr[0]
@@ -68,6 +83,7 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
         arr[index] = temp
         return arr
 
+    # 4. JSコードを解析し、Python関数にマッピング
     helper_funcs = re.findall(r'([a-zA-Z0-9$]+)\s*:\s*function\s*\(a(?:,b)?\)\s*\{([\s\S]+?)\}', helper_funcs_str)
     
     patterns_map = {
@@ -107,7 +123,10 @@ def decipher_signature(s_cipher: str, js_url: str) -> Optional[str]:
     
     for op in operations:
         # パラメータの有無に柔軟に対応
-        func_call = re.match(r'([a-zA-Z0-9$]+\.[a-zA-Z0-9$]+)\(a(?:,\s*(\d+))?\)', op)
+        # func_call = re.match(r'([a-zA-Z0-9$]+\.[a-zA-Z0-9$]+)\(a(?:,\s*(\d+))?\)', op)
+        # 🔑 正規表現をより緩く修正
+        func_call = re.match(r'([a-zA-Z0-9$]+\.[a-zA-Z0-9$]+)\(a\s*(?:,\s*(\d+))?\)', op)
+        
         if not func_call:
             continue
 
@@ -116,7 +135,6 @@ def decipher_signature(s_cipher: str, js_url: str) -> Optional[str]:
         param = int(param_str) if param_str else 0 
 
         if func_name in decipher_funcs:
-            # 🔑 新しいデバッグprint文
             print(f"  [DEBUG] 適用操作: {func_name}, パラメータ: {param}, 配列の長さ: {len(signature_array)}")
             
             decipher_funcs[func_name](signature_array, param)
@@ -166,7 +184,7 @@ def extract_stream_info(format_data: Dict[str, Any]) -> Dict[str, Any]:
     return stream_info
 
 # -------------------------------------------------------------
-# 3. Flask ルート定義
+# 3. Flask ルート定義 (変更なし)
 # -------------------------------------------------------------
 
 @app.route("/parse_final", methods=['GET'])
