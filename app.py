@@ -45,7 +45,6 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
     helper_funcs_str = helper_obj_match.group(2)
     print(f"  [STEP 2-3] ヘルパーオブジェクト名 '{helper_obj_name}' を特定しました。")
     
-    # メイン関数の操作リストを抽出 (パラメータがない場合も対応)
     main_func_match = re.search(
         r'\w+\s*=\s*function\s*\(\s*a\s*\)\s*{\s*a\s*=\s*a\.split\(""\)\s*;\s*((?:[a-zA-Z0-9$]+\.[a-zA-Z0-9$]+\(a(?:,\s*\d+)?\)\s*;)+)\s*return\s*a\.join\(""\)\s*}', 
         js_code
@@ -61,6 +60,8 @@ def get_decipher_logic(js_url: str) -> Optional[Dict[str, Callable]]:
     def func_splice(arr: list, index: int) -> list: del arr[:index]; return arr
     def func_reverse(arr: list, *args) -> list: arr.reverse(); return arr
     def func_swap(arr: list, index: int) -> list:
+        # 実行前に配列の長さを確認し、indexが有効な範囲に収まるようにする
+        if not arr: return arr
         index = index % len(arr)
         temp = arr[0]
         arr[0] = arr[index]
@@ -115,6 +116,9 @@ def decipher_signature(s_cipher: str, js_url: str) -> Optional[str]:
         param = int(param_str) if param_str else 0 
 
         if func_name in decipher_funcs:
+            # 🔑 新しいデバッグprint文
+            print(f"  [DEBUG] 適用操作: {func_name}, パラメータ: {param}, 配列の長さ: {len(signature_array)}")
+            
             decipher_funcs[func_name](signature_array, param)
             op_count += 1
     
@@ -184,7 +188,7 @@ def parse_final_api():
         response.raise_for_status()
         innertube_response: Dict[str, Any] = response.json()
         
-        # 🔑 ご要望のprint文
+        # ご要望のprint文
         print(f"レスポンス: {response}")
         print(f"Innertubeレスポンス (JSON): {json.dumps(innertube_response, indent=2)}")
         
